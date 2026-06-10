@@ -5,13 +5,17 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  RotateCcw,
   Save,
+  Sparkles,
   UserCircle,
 } from 'lucide-react';
 import { supabase, supabaseConfigMissing } from './supabaseClient.js';
 import './styles.css';
 
-const sections = [
+const templateSettingsStorageKey = 'my-sanctuary-enabled-questions';
+
+const templateSections = [
   {
     key: 'daily',
     title: '오늘의 일상',
@@ -55,6 +59,13 @@ const sections = [
         key: 'emotion_behavior_effect',
         text: '그 감정이 내 행동에 어떤 영향을 줬는가?',
         prompt: '그 감정 때문에 더 하게 된 행동이나 피하게 된 행동을 적어보세요.',
+      },
+      {
+        key: 'emotion_body_energy',
+        text: '오늘 내 몸과 에너지는 어떤 상태였나?',
+        prompt: '피로감, 긴장, 활력, 수면, 식사처럼 몸의 신호를 적어보세요.',
+        enabledByDefault: false,
+        kind: 'suggested',
       },
     ],
   },
@@ -102,6 +113,27 @@ const sections = [
         text: '여기서 얻은 교훈이나 원칙은 무엇인가?',
         prompt: '다음에도 적용할 수 있는 짧은 원칙으로 바꿔보세요.',
       },
+      {
+        key: 'growth_repeat_success',
+        text: '오늘 다시 반복하고 싶은 선택은 무엇인가?',
+        prompt: '작게라도 잘 된 선택을 다음에도 재현할 수 있게 적어보세요.',
+        enabledByDefault: false,
+        kind: 'suggested',
+      },
+      {
+        key: 'growth_avoidance',
+        text: '오늘 미루거나 피한 것은 무엇인가?',
+        prompt: '저항감이 생겼던 일과 그 이유를 차분히 적어보세요.',
+        enabledByDefault: false,
+        kind: 'suggested',
+      },
+      {
+        key: 'growth_value_alignment',
+        text: '오늘 나답다고 느낀 순간은 언제였나?',
+        prompt: '내 가치나 방향과 잘 맞았던 장면을 하나 적어보세요.',
+        enabledByDefault: false,
+        kind: 'suggested',
+      },
     ],
   },
   {
@@ -125,22 +157,21 @@ const sections = [
         text: '오늘의 교훈을 어떻게 적용할 것인가?',
         prompt: '시간, 장소, 행동이 보이도록 구체적으로 적어보세요.',
       },
+      {
+        key: 'action_obstacle_response',
+        text: '내일 이 행동을 방해할 것은 무엇이고, 어떻게 대응할 것인가?',
+        prompt: '예상 장애물과 그때 사용할 작은 대응책을 함께 적어보세요.',
+        enabledByDefault: false,
+        kind: 'suggested',
+      },
     ],
   },
 ];
 
-const diarySteps = sections.flatMap((section, sectionIndex) =>
-  section.questions.map((question, questionIndex) => ({
-    ...question,
-    sectionKey: section.key,
-    sectionTitle: section.title,
-    sectionPrompt: section.prompt,
-    sectionIndex,
-    questionIndex,
-  })),
-);
-
-const totalFlowSteps = diarySteps.length + 1;
+const allDiarySteps = flattenSections(templateSections);
+const defaultEnabledQuestionKeys = allDiarySteps
+  .filter((step) => step.enabledByDefault)
+  .map((step) => step.key);
 
 const emptyDraft = (date = todayKey()) => ({
   id: null,
@@ -163,6 +194,7 @@ function DiaryApp() {
   const [selectedDate, setSelectedDate] = useState(todayKey());
   const [activePage, setActivePage] = useState('write');
   const [selectedReadId, setSelectedReadId] = useState(null);
+  const [enabledQuestionKeys, setEnabledQuestionKeys] = useState(loadEnabledQuestionKeys);
   const [draft, setDraft] = useState(emptyDraft());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -170,10 +202,18 @@ function DiaryApp() {
   const [activeStep, setActiveStep] = useState(0);
   const [slideDirection, setSlideDirection] = useState('forward');
 
+  const activeSections = useMemo(
+    () => buildActiveSections(enabledQuestionKeys),
+    [enabledQuestionKeys],
+  );
+  const diarySteps = useMemo(() => flattenSections(activeSections), [activeSections]);
+  const totalFlowSteps = diarySteps.length + 1;
+
   const completedCount = diarySteps.filter(
     (step) => draft.answers?.[step.key]?.trim(),
   ).length;
-  const progressPercent = (activeStep / diarySteps.length) * 100;
+  const progressPercent =
+    diarySteps.length === 0 ? 0 : (activeStep / diarySteps.length) * 100;
   const progressLabel =
     activeStep === 0 ? 'DATE' : `STEP ${activeStep} OF ${diarySteps.length}`;
 
@@ -182,8 +222,16 @@ function DiaryApp() {
   }, []);
 
   useEffect(() => {
+    saveEnabledQuestionKeys(enabledQuestionKeys);
+  }, [enabledQuestionKeys]);
+
+  useEffect(() => {
     setDraft(emptyDraft(selectedDate));
   }, [selectedDate]);
+
+  useEffect(() => {
+    setActiveStep((current) => Math.min(current, totalFlowSteps - 1));
+  }, [totalFlowSteps]);
 
   useEffect(() => {
     setSlideDirection('forward');
@@ -243,7 +291,7 @@ function DiaryApp() {
     setSaving(true);
     setError('');
 
-    const answers = sanitizeAnswers(draft.answers);
+    const answers = sanitizeAnswers(draft.answers, diarySteps);
     const payload = {
       entry_date: draft.entry_date,
       answers,
@@ -301,7 +349,13 @@ function DiaryApp() {
             나의 일기(읽기)
           </button>
           <button type="button">통계</button>
-          <button type="button">설정</button>
+          <button
+            className={activePage === 'settings' ? 'active' : ''}
+            type="button"
+            onClick={() => setActivePage('settings')}
+          >
+            설정
+          </button>
         </nav>
         <UserCircle className="gnb-user" size={27} strokeWidth={1.8} />
       </header>
@@ -322,6 +376,7 @@ function DiaryApp() {
           <StepEditor
             activeStep={activeStep}
             completedCount={completedCount}
+            diarySteps={diarySteps}
             draft={draft}
             goToStep={goToStep}
             saveDraft={saveDraft}
@@ -329,10 +384,11 @@ function DiaryApp() {
             saving={saving}
             setSelectedDate={setSelectedDate}
             slideDirection={slideDirection}
+            totalFlowSteps={totalFlowSteps}
             updateDraft={updateDraft}
           />
         </main>
-      ) : (
+      ) : activePage === 'read' ? (
         <ReadPage
           entries={entries}
           error={error}
@@ -340,6 +396,11 @@ function DiaryApp() {
           onRefresh={fetchEntries}
           selectedReadId={selectedReadId}
           setSelectedReadId={setSelectedReadId}
+        />
+      ) : (
+        <SettingsPage
+          enabledQuestionKeys={enabledQuestionKeys}
+          setEnabledQuestionKeys={setEnabledQuestionKeys}
         />
       )}
     </div>
@@ -349,6 +410,7 @@ function DiaryApp() {
 function StepEditor({
   activeStep,
   completedCount,
+  diarySteps,
   draft,
   goToStep,
   saveDraft,
@@ -356,6 +418,7 @@ function StepEditor({
   saving,
   setSelectedDate,
   slideDirection,
+  totalFlowSteps,
   updateDraft,
 }) {
   const isDateStep = activeStep === 0;
@@ -606,7 +669,7 @@ function ReadPage({
               </div>
 
               <div className="reader-sections">
-                {sections.map((section, index) => {
+                {templateSections.map((section, index) => {
                   const text = composeSectionText(section, selectedEntry.answers);
                   return (
                     <section className="reader-section" key={section.key}>
@@ -632,6 +695,120 @@ function ReadPage({
   );
 }
 
+function SettingsPage({ enabledQuestionKeys, setEnabledQuestionKeys }) {
+  const enabledSet = useMemo(() => new Set(enabledQuestionKeys), [enabledQuestionKeys]);
+  const suggestedQuestionKeys = allDiarySteps
+    .filter((step) => step.kind === 'suggested')
+    .map((step) => step.key);
+  const enabledDefaultCount = defaultEnabledQuestionKeys.filter((key) =>
+    enabledSet.has(key),
+  ).length;
+  const enabledSuggestedCount = suggestedQuestionKeys.filter((key) =>
+    enabledSet.has(key),
+  ).length;
+
+  function toggleQuestion(key) {
+    setEnabledQuestionKeys((current) => {
+      const next = new Set(current);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      return normalizeEnabledQuestionKeys([...next]);
+    });
+  }
+
+  function restoreDefaults() {
+    setEnabledQuestionKeys(defaultEnabledQuestionKeys);
+  }
+
+  function enableSuggestedQuestions() {
+    setEnabledQuestionKeys((current) =>
+      normalizeEnabledQuestionKeys([...current, ...suggestedQuestionKeys]),
+    );
+  }
+
+  return (
+    <main className="settings-page">
+      <header className="settings-hero">
+        <div>
+          <span>TEMPLATE</span>
+          <h1>일기 템플릿</h1>
+          <p>작성 플로우에 넣을 질문을 고릅니다.</p>
+        </div>
+        <div className="settings-actions">
+          <button className="settings-action" type="button" onClick={restoreDefaults}>
+            <RotateCcw size={17} />
+            기본값 복원
+          </button>
+          <button
+            className="settings-action primary"
+            type="button"
+            onClick={enableSuggestedQuestions}
+          >
+            <Sparkles size={17} />
+            추천 모두 켜기
+          </button>
+        </div>
+      </header>
+
+      <section className="settings-summary" aria-label="템플릿 상태">
+        <div>
+          <strong>{enabledQuestionKeys.length}</strong>
+          <span>활성 질문</span>
+        </div>
+        <div>
+          <strong>{enabledDefaultCount}/{defaultEnabledQuestionKeys.length}</strong>
+          <span>기본 질문</span>
+        </div>
+        <div>
+          <strong>{enabledSuggestedCount}/{suggestedQuestionKeys.length}</strong>
+          <span>추천 질문</span>
+        </div>
+      </section>
+
+      <section className="template-settings-list">
+        {templateSections.map((section) => (
+          <article className="template-section-card" key={section.key}>
+            <div className="template-section-heading">
+              <span>{section.navTitle}</span>
+              <h2>{section.title}</h2>
+            </div>
+
+            <div className="template-question-list">
+              {section.questions.map((question) => {
+                const isEnabled = enabledSet.has(question.key);
+                const isSuggested = question.kind === 'suggested';
+
+                return (
+                  <label className="template-question-row" key={question.key}>
+                    <input
+                      checked={isEnabled}
+                      type="checkbox"
+                      onChange={() => toggleQuestion(question.key)}
+                    />
+                    <span className="template-switch" aria-hidden="true" />
+                    <span className="template-question-copy">
+                      <span>
+                        {question.text}
+                        <em>{isSuggested ? '추천' : '기본'}</em>
+                      </span>
+                      <small>{question.prompt}</small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </article>
+        ))}
+      </section>
+    </main>
+  );
+}
+
 function ConfigMissing() {
   return (
     <main className="auth-screen">
@@ -645,6 +822,64 @@ function ConfigMissing() {
       </div>
     </main>
   );
+}
+
+function flattenSections(sourceSections) {
+  return sourceSections.flatMap((section, sectionIndex) =>
+    section.questions.map((question, questionIndex) => ({
+      ...question,
+      enabledByDefault: question.enabledByDefault ?? true,
+      kind: question.kind ?? 'default',
+      sectionKey: section.key,
+      sectionTitle: section.title,
+      sectionPrompt: section.prompt,
+      sectionIndex,
+      questionIndex,
+    })),
+  );
+}
+
+function buildActiveSections(enabledQuestionKeys) {
+  const enabledSet = new Set(enabledQuestionKeys);
+
+  return templateSections
+    .map((section) => ({
+      ...section,
+      questions: section.questions.filter((question) => enabledSet.has(question.key)),
+    }))
+    .filter((section) => section.questions.length > 0);
+}
+
+function normalizeEnabledQuestionKeys(keys) {
+  const enabledSet = new Set(keys);
+  return allDiarySteps
+    .filter((step) => enabledSet.has(step.key))
+    .map((step) => step.key);
+}
+
+function loadEnabledQuestionKeys() {
+  try {
+    const saved = window.localStorage.getItem(templateSettingsStorageKey);
+    if (!saved) return defaultEnabledQuestionKeys;
+
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return defaultEnabledQuestionKeys;
+
+    return normalizeEnabledQuestionKeys(parsed);
+  } catch {
+    return defaultEnabledQuestionKeys;
+  }
+}
+
+function saveEnabledQuestionKeys(keys) {
+  try {
+    window.localStorage.setItem(
+      templateSettingsStorageKey,
+      JSON.stringify(normalizeEnabledQuestionKeys(keys)),
+    );
+  } catch {
+    // Template settings are a convenience layer; the diary still works without localStorage.
+  }
 }
 
 function normalizeEntry(entry) {
@@ -698,7 +933,7 @@ function previewText(entry) {
 }
 
 function emptyAnswers() {
-  return Object.fromEntries(diarySteps.map((step) => [step.key, '']));
+  return Object.fromEntries(allDiarySteps.map((step) => [step.key, '']));
 }
 
 function normalizeAnswers(rawAnswers, entry) {
@@ -708,11 +943,11 @@ function normalizeAnswers(rawAnswers, entry) {
       ? rawAnswers
       : {};
 
-  for (const step of diarySteps) {
+  for (const step of allDiarySteps) {
     answers[step.key] = typeof source[step.key] === 'string' ? source[step.key] : '';
   }
 
-  for (const section of sections) {
+  for (const section of templateSections) {
     const hasDetailedAnswer = section.questions.some((question) =>
       answers[question.key]?.trim(),
     );
@@ -725,15 +960,15 @@ function normalizeAnswers(rawAnswers, entry) {
   return answers;
 }
 
-function sanitizeAnswers(answers) {
+function sanitizeAnswers(answers, steps) {
   return Object.fromEntries(
-    diarySteps.map((step) => [step.key, (answers?.[step.key] ?? '').trim()]),
+    steps.map((step) => [step.key, (answers?.[step.key] ?? '').trim()]),
   );
 }
 
 function composeSectionFields(answers) {
   return Object.fromEntries(
-    sections.map((section) => [section.key, composeSectionText(section, answers)]),
+    templateSections.map((section) => [section.key, composeSectionText(section, answers)]),
   );
 }
 
