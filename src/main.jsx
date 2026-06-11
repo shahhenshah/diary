@@ -4,11 +4,13 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Menu,
   RefreshCw,
   RotateCcw,
   Save,
   Sparkles,
   UserCircle,
+  X,
 } from 'lucide-react';
 import { supabase, supabaseConfigMissing } from './supabaseClient.js';
 import './styles.css';
@@ -623,6 +625,24 @@ function ReadPage({
   const selectedEntry =
     entries.find((entry) => entry.id === selectedReadId) ?? entries[0] ?? null;
 
+  const [activeSectionIndex, setActiveSectionIndex] = useState(0);
+  const [slideDirection, setSlideDirection] = useState('forward');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    setActiveSectionIndex(0);
+    setSlideDirection('forward');
+    setSidebarOpen(false); // Close drawer on date change
+  }, [selectedReadId]);
+
+  const handleGoToSection = (nextIndex) => {
+    const safeIndex = Math.min(Math.max(nextIndex, 0), templateSections.length - 1);
+    if (safeIndex === activeSectionIndex) return;
+
+    setSlideDirection(safeIndex > activeSectionIndex ? 'forward' : 'back');
+    setActiveSectionIndex(safeIndex);
+  };
+
   return (
     <main className="read-page">
       <header className="read-hero">
@@ -638,51 +658,134 @@ function ReadPage({
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
+      
+      {sidebarOpen ? (
+        <div className="drawer-backdrop" onClick={() => setSidebarOpen(false)} />
+      ) : null}
 
       <section className="read-layout">
-        <aside className="entry-rail" aria-label="저장된 일기 목록">
-          {loading ? (
-            <div className="read-empty">불러오는 중</div>
-          ) : entries.length === 0 ? (
-            <div className="read-empty">아직 저장된 일기가 없습니다.</div>
-          ) : (
-            entries.map((entry) => (
-              <button
-                className={entry.id === selectedEntry?.id ? 'read-entry active' : 'read-entry'}
-                key={entry.id}
-                type="button"
-                onClick={() => setSelectedReadId(entry.id)}
-              >
-                <strong>{formatDate(entry.entry_date)}</strong>
-                <span>{previewText(entry)}</span>
-              </button>
-            ))
-          )}
+        <aside className={sidebarOpen ? 'entry-rail open' : 'entry-rail'} aria-label="저장된 일기 목록">
+          <div className="drawer-header">
+            <h3>일기 목록</h3>
+            <button className="drawer-close" type="button" onClick={() => setSidebarOpen(false)}>
+              <X size={20} />
+            </button>
+          </div>
+          <div className="drawer-entries">
+            {loading ? (
+              <div className="read-empty">불러오는 중</div>
+            ) : entries.length === 0 ? (
+              <div className="read-empty">아직 저장된 일기가 없습니다.</div>
+            ) : (
+              entries.map((entry) => (
+                <button
+                  className={entry.id === selectedEntry?.id ? 'read-entry active' : 'read-entry'}
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSelectedReadId(entry.id)}
+                >
+                  <strong>{formatDate(entry.entry_date)}</strong>
+                  <span>{previewText(entry)}</span>
+                </button>
+              ))
+            )}
+          </div>
         </aside>
 
         <article className="entry-reader">
           {selectedEntry ? (
-            <>
+            <div className="reader-card-layout">
               <div className="reader-heading">
-                <span>{shortDate(selectedEntry.entry_date)}</span>
+                <div className="reader-heading-top">
+                  <button className="sidebar-toggle-button" type="button" onClick={() => setSidebarOpen(true)}>
+                    <Menu size={16} />
+                    일기 목록
+                  </button>
+                  <span>{shortDate(selectedEntry.entry_date)}</span>
+                </div>
                 <h2>{formatDate(selectedEntry.entry_date)} 통합 일기</h2>
               </div>
 
-              <div className="reader-sections">
+              <div className="reader-card-stage">
                 {templateSections.map((section, index) => {
-                  const text = composeSectionText(section, selectedEntry.answers);
+                  if (index !== activeSectionIndex) return null;
+
+                  const hasAnswers = section.questions.some(
+                    (question) => selectedEntry.answers?.[question.key]?.trim()
+                  );
+
                   return (
-                    <section className="reader-section" key={section.key}>
-                      <div>
-                        <span>{index + 1}</span>
-                        <h3>{section.title}</h3>
+                    <div
+                      className={`reader-card-slide ${slideDirection}`}
+                      key={`${section.key}-${slideDirection}`}
+                    >
+                      <div className="reader-card-header">
+                        <span className="reader-card-number">{index + 1} / 5</span>
+                        <h3 className="reader-card-title">{section.title}</h3>
+                        <p className="reader-card-prompt">{section.prompt}</p>
                       </div>
-                      <p>{text || '아직 기록된 답변이 없습니다.'}</p>
-                    </section>
+
+                      <div className="reader-card-body">
+                        {hasAnswers ? (
+                          <div className="reader-qa-list">
+                            {section.questions.map((question, qIndex) => {
+                              const answer = selectedEntry.answers?.[question.key];
+                              if (!answer?.trim()) return null;
+                              return (
+                                <div key={question.key} className="reader-qa-item">
+                                  <h4 className="reader-qa-question">
+                                    Q{qIndex + 1}. {question.text}
+                                  </h4>
+                                  <p className="reader-qa-answer">{answer}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="reader-card-empty">
+                            <p>이 챕터는 작성된 답변이 없습니다.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
-            </>
+
+              <div className="reader-card-footer">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={activeSectionIndex === 0}
+                  onClick={() => handleGoToSection(activeSectionIndex - 1)}
+                >
+                  <ChevronLeft size={18} />
+                  이전
+                </button>
+
+                <div className="reader-card-dots">
+                  {templateSections.map((section, index) => (
+                    <button
+                      key={section.key}
+                      className={index === activeSectionIndex ? 'active' : ''}
+                      type="button"
+                      onClick={() => handleGoToSection(index)}
+                      aria-label={`${index + 1}번째 챕터로 이동`}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={activeSectionIndex === templateSections.length - 1}
+                  onClick={() => handleGoToSection(activeSectionIndex + 1)}
+                >
+                  다음
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="reader-placeholder">
               <h2>읽을 일기를 선택하세요</h2>

@@ -1465,17 +1465,73 @@ textarea {
 }
 
 .read-layout {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 28px;
-  width: min(1060px, 100%);
+  display: block;
+  width: min(900px, 100%);
   margin: 0 auto;
+  position: relative;
 }
 
 .entry-rail {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 320px;
+  background: #f1f0ef;
+  box-shadow: 20px 0 50px rgba(17, 19, 18, 0.08);
+  z-index: 1000;
+  padding: 34px 24px;
+  transform: translateX(-100%);
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.entry-rail.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #dcdad8;
+  padding-bottom: 14px;
+  margin-bottom: 6px;
+}
+
+.drawer-header h3 {
+  color: #415d4d;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #77716d;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.drawer-close:hover {
+  background: #e7e5e3;
+  color: #111312;
+}
+
+.drawer-entries {
+  flex: 1;
+  overflow-y: auto;
   display: grid;
   align-content: start;
   gap: 10px;
+  padding-right: 4px;
 }
 
 .read-entry {
@@ -1540,10 +1596,39 @@ textarea {
   padding-bottom: 28px;
 }
 
-.reader-heading span {
+.reader-heading-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.reader-heading-top span {
   color: #8a8580;
   font-size: 14px;
   letter-spacing: 3px;
+}
+
+.sidebar-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e0dedc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #415d4d;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 14px;
+  min-height: 34px;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.sidebar-toggle-button:hover {
+  background: #fbfaf8;
+  border-color: #cbd6d1;
 }
 
 .reader-heading h2 {
@@ -1556,50 +1641,157 @@ textarea {
   font-weight: 800;
 }
 
-.reader-sections {
-  display: grid;
-  gap: 30px;
-  padding-top: 34px;
-}
-
-.reader-section {
-  display: grid;
-  gap: 14px;
-}
-
-.reader-section div {
+.reader-card-layout {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  height: 100%;
 }
 
-.reader-section div span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: #e8eee9;
-  color: #415d4d;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  font-size: 14px;
+.reader-card-stage {
+  flex: 1;
+  display: grid;
+  margin-top: 24px;
+  min-height: 0;
+  perspective: 1200px;
+}
+
+.reader-card-slide {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #efedeb;
+  border-radius: 24px;
+  background: #ffffff;
+  padding: clamp(20px, 3vw, 32px);
+  box-shadow: 0 8px 30px rgba(43, 52, 48, 0.03);
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.reader-card-slide.forward {
+  animation: slideForward 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reader-card-slide.back {
+  animation: slideBack 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reader-card-header {
+  border-bottom: 1px solid #f8f7f6;
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.reader-card-number {
+  display: inline-block;
+  color: #6f8178;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+
+.reader-card-title {
+  color: #111312;
+  font-size: clamp(20px, 2.5vw, 24px);
   font-weight: 800;
 }
 
-.reader-section h3 {
-  color: #24312b;
-  font-size: 20px;
-  font-weight: 700;
+.reader-card-prompt {
+  color: #77716d;
+  font-size: 15px;
+  margin-top: 6px;
+  line-height: 1.5;
 }
 
-.reader-section p {
+.reader-card-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.reader-qa-list {
+  display: grid;
+  gap: 24px;
+}
+.reader-qa-item {
+  display: grid;
+  gap: 8px;
+  position: relative;
+  padding-left: 20px;
+}
+
+.reader-qa-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: #e0dedc;
+  border-radius: 99px;
+  transition: background-color 160ms ease;
+}
+
+.reader-qa-item:hover::before {
+  background: #415d4d;
+}
+
+.reader-qa-question {
+  color: #6f8178;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+}
+
+.reader-qa-answer {
   white-space: pre-wrap;
-  color: #3b403d;
+  color: #1c1e1d;
+  font-family: "Noto Serif KR", "Iowan Old Style", Georgia, serif;
   font-size: 18px;
-  line-height: 1.8;
+  line-height: 1.85;
+  padding-bottom: 4px;
+}
+
+.reader-card-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 150px;
+  color: #8a8580;
+  font-size: 16px;
+}
+
+.reader-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  border-top: 1px solid #efedeb;
+  padding-top: 20px;
+}
+
+.reader-card-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reader-card-dots button {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #cbd6d1;
+  padding: 0;
+  transition: width 180ms ease, background-color 180ms ease;
+}
+
+.reader-card-dots button.active {
+  width: 24px;
+  background: #415d4d;
 }
 
 .reader-placeholder {
@@ -1942,17 +2134,6 @@ textarea {
 
   .read-refresh {
     align-self: flex-start;
-  }
-
-  .read-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .entry-rail {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(220px, 1fr);
-    overflow-x: auto;
-    padding-bottom: 4px;
   }
 
   .entry-reader {
